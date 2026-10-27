@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LUMEN — Cinema Ticket Booking</title>
+  <meta name="description" content="LUMEN — Book movie tickets online. Browse now-showing and upcoming films, pick your seats, and secure your spot at the cinema." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script>
+    (function() {
+      try {
+        var saved = localStorage.getItem('lumen_theme');
+        var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════
+       DEMO ROLE ENTRY SCREEN
+       Minimal, text-only role selection without fake auth
+  ═══════════════════════════════════════════════ -->
+  <div class="login-screen" id="loginScreen" role="main" aria-label="Demo role selection">
+    <div class="role-entry-card">
+      <div class="role-entry-brand">
+        <span class="logo-icon" aria-hidden="true">◈</span>
+        <span class="logo-text">LUMEN</span>
+      </div>
+      <p class="role-entry-subtitle">Select an experience to explore</p>
+
+      <div class="role-choice-grid" role="group" aria-label="Select demo role">
+        <button type="button" class="role-choice-btn" data-role="CUSTOMER">
+          <span class="role-choice-title">Customer</span>
+          <span class="role-choice-desc">Browse movie catalogue, inspect schedules, and book seats</span>
+        </button>
+
+        <button type="button" class="role-choice-btn" data-role="OWNER">
+          <span class="role-choice-title">Cinema Owner</span>
+          <span class="role-choice-desc">View showtime schedule, screen tiers, and venue information</span>
+        </button>
+
+        <button type="button" class="role-choice-btn" data-role="ADMIN">
+          <span class="role-choice-title">Administrator</span>
+          <span class="role-choice-desc">System overview, active film inventory, and live API status</span>
+        </button>
+      </div>
+
+      <p class="role-entry-note">Demo environment — no server authentication required.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       CUSTOMER VIEW (existing movie-booking UI)
+  ═══════════════════════════════════════════════ -->
+  <div class="app-view" id="customerView" hidden>
+
+    <!-- DEMO VIEW BANNER -->
+    <div class="demo-view-banner" role="status">
+      <span class="demo-view-banner__badge">DEMO</span>
+      <span class="demo-view-banner__label">Customer View</span>
+      <div class="demo-view-banner__right">
+        <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle visual theme">
+          <span class="theme-toggle__icon" aria-hidden="true">◐</span>
+          <span class="theme-toggle__text" id="themeToggleVal">Dark</span>
+        </button>
+        <button class="btn btn--ghost btn--sm" id="customerLogout" aria-label="Log out and return to role selection">Switch Role</button>
+      </div>
+    </div>
+
+    <!-- HEADER / NAV -->
+    <header class="site-header" role="banner">
+      <div class="header-inner container">
+        <a href="#home" class="logo" aria-label="LUMEN Home" id="customerLogoLink">
+          <span class="logo-icon" aria-hidden="true">◈</span>
+          <span class="logo-text">LUMEN</span>
+        </a>
+        <nav class="site-nav" aria-label="Main navigation">
+          <a href="#home"        class="nav-link" id="nav-home">Home</a>
+          <a href="#now-showing" class="nav-link" id="nav-now">Now Showing</a>
+          <a href="#coming-soon" class="nav-link" id="nav-soon">Coming Soon</a>
+        </nav>
+        <div class="header-actions">
+          <button class="nav-toggle" id="navToggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileNav">
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </div>
+      <div class="mobile-nav" id="mobileNav" aria-hidden="true">
+        <a href="#home"        class="mobile-nav-link">Home</a>
+        <a href="#now-showing" class="mobile-nav-link">Now Showing</a>
+        <a href="#coming-soon" class="mobile-nav-link">Coming Soon</a>
+      </div>
+    </header>
+
+    <!-- DISCOVERY & POSTER RAIL SECTION -->
+    <section class="discovery-section" id="home" aria-label="Featured Films Discovery">
+      <div class="container discovery-inner">
+        <div class="discovery-header">
+          <div class="discovery-header__titles">
+            <span class="discovery-eyebrow">NOW SHOWING</span>
+            <h2 class="discovery-title">Featured Films</h2>
+          </div>
+          <div class="carousel-nav" aria-label="Poster rail navigation">
+            <button type="button" class="carousel-btn carousel-btn--prev" id="carouselPrev" aria-label="Previous posters">‹</button>
+            <button type="button" class="carousel-btn carousel-btn--next" id="carouselNext" aria-label="Next posters">›</button>
+          </div>
+        </div>
+
+        <div class="poster-rail-wrapper" id="posterRailWrapper" tabindex="0" aria-label="Featured movie poster rail">
+          <div class="poster-rail" id="posterRail" role="region" aria-live="off">
+            <!-- Dynamically populated from /api/movies -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN CONTENT -->
+    <main id="mainContent">
+
+      <div class="global-error" id="globalError" role="alert" hidden>
+        <span class="global-error__icon" aria-hidden="true">⚠</span>
+        <span class="global-error__msg" id="globalErrorMsg"></span>
+        <button class="global-error__retry" id="globalErrorRetry" aria-label="Retry loading">Retry</button>
+      </div>
+
+      <div class="section-loading" id="moviesLoading" aria-live="polite" aria-label="Loading movies">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>Loading films…</p>
+      </div>
+
+      <!-- MOVIE SEARCH BAR -->
+      <div class="search-section" id="searchSection">
+        <div class="container">
+          <div class="search-bar search-bar--centered" role="search">
+            <label for="searchInput" class="sr-only">Search movies by title</label>
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input
+              id="searchInput"
+              type="text"
+              class="search-input"
+              placeholder="Search movies by title…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="button" class="search-clear" id="searchClear" aria-label="Clear search input" hidden>✕</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- GLOBAL SEARCH EMPTY STATE -->
+      <div class="container">
+        <div class="empty-state" id="globalSearchEmpty" hidden>
+          <div class="empty-state__icon" aria-hidden="true">🔍</div>
+          <p class="empty-state__title" id="globalSearchEmptyTitle">No films found</p>
+          <p class="empty-state__sub">No movies matched your search query. Try searching with a different title.</p>
+        </div>
+      </div>
+
+      <!-- NOW SHOWING SECTION -->
+      <section class="movie-section" id="now-showing" aria-labelledby="nowShowingHeading">
+        <div class="container">
+          <header class="section-header">
+            <div class="section-header__left">
+              <span class="section-badge now-badge" aria-hidden="true">IN CINEMAS</span>
+              <h2 class="section-title" id="nowShowingHeading">Now Showing</h2>
+            </div>
+            <div class="section-header__right">
+              <span class="section-count" id="nowShowingCount" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <div class="movie-grid" id="nowShowingGrid" role="list" aria-label="Now Showing movies"></div>
+
+          <div class="empty-state" id="nowShowingEmpty" hidden>
+            <div class="empty-state__icon" aria-hidden="true">🎬</div>
+            <p class="empty-state__title">No films currently in cinemas match your search</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- COMING SOON SECTION -->
+      <section class="movie-section" id="coming-soon" aria-labelledby="comingSoonHeading">
+        <div class="container">
+          <header class="section-header">
+            <div class="section-header__left">
+              <span class="section-badge soon-badge" aria-hidden="true">UPCOMING RELEASES</span>
+              <h2 class="section-title" id="comingSoonHeading">Coming Soon</h2>
+            </div>
+            <div class="section-header__right">
+              <span class="section-count" id="comingSoonCount" aria-live="polite"></span>
+            </div>
+          </header>
+
+          <div class="movie-grid" id="comingSoonGrid" role="list" aria-label="Coming Soon movies"></div>
+
+          <div class="empty-state" id="comingSoonEmpty" hidden>
+            <div class="empty-state__icon" aria-hidden="true">📅</div>
+            <p class="empty-state__title">No upcoming films match your search</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- SEAT SELECTION MODAL -->
+    <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true"></div>
+    <dialog class="seat-modal" id="seatModal" aria-labelledby="seatModalTitle" aria-modal="true">
+      <div class="seat-modal__header">
+        <div class="seat-modal__title-group">
+          <h2 class="seat-modal__title" id="seatModalTitle">Select Seats</h2>
+          <p class="seat-modal__subtitle" id="seatModalSubtitle"></p>
+        </div>
+        <button class="modal-close" id="seatModalClose" aria-label="Close seat selection">✕</button>
+      </div>
+      <div class="seat-loading" id="seatLoading" aria-live="polite">
+        <div class="spinner spinner--sm" aria-hidden="true"></div>
+        <p>Loading seats…</p>
+      </div>
+      <div class="seat-error" id="seatError" hidden role="alert">
+        <p class="seat-error__msg" id="seatErrorMsg"></p>
+        <button class="btn btn--ghost" id="seatRetry">Retry</button>
+      </div>
+      <div class="seat-map-container" id="seatMapContainer" hidden>
+        <div class="screen-indicator" aria-hidden="true">
+          <div class="screen-bar"></div>
+          <p class="screen-label" id="screenLabel">SCREEN</p>
+        </div>
+        <div class="seat-legend" role="list" aria-label="Seat status legend">
+          <div class="legend-item" role="listitem"><span class="legend-dot available" aria-hidden="true"></span>Available</div>
+          <div class="legend-item" role="listitem"><span class="legend-dot selected"  aria-hidden="true"></span>Selected</div>
+          <div class="legend-item" role="listitem"><span class="legend-dot held"      aria-hidden="true"></span>Held</div>
+          <div class="legend-item" role="listitem"><span class="legend-dot booked"    aria-hidden="true"></span>Booked</div>
+          <div class="legend-item" role="listitem"><span class="legend-dot premium"   aria-hidden="true">★</span>Premium Tier</div>
+        </div>
+        <div class="seat-map" id="seatMap" role="group" aria-label="Seat map"></div>
+        <div class="booking-bar" id="bookingBar">
+          <div class="booking-bar__info">
+            <span class="booking-bar__label">Selected:</span>
+            <span class="booking-bar__seats" id="selectedSeatLabels">—</span>
+          </div>
+          <div class="booking-bar__right">
+            <span class="booking-bar__total" id="selectedTotal">₹0</span>
+            <button class="btn btn--primary" id="holdBtn" disabled>Hold Seats</button>
+          </div>
+        </div>
+      </div>
+      <!-- CHECKOUT PANEL -->
+      <div class="checkout-panel" id="checkoutPanel" hidden>
+        <div class="checkout-panel__inner">
+          <h3 class="checkout-panel__title">Booking Summary</h3>
+          <div class="checkout-details" id="checkoutDetails"></div>
+          <div class="demo-payment-box" aria-label="Demo payment simulation">
+            <p class="demo-payment-box__label">
+              <span class="demo-tag" aria-label="Demo only">DEMO</span>
+              Simulated Payment — No real money is charged
+            </p>
+            <div class="demo-payment-box__btns">
+              <button class="btn btn--success" id="paySuccessBtn">✓ Simulate Successful Payment</button>
+              <button class="btn btn--danger"  id="payFailBtn">✕ Simulate Failed Payment</button>
+            </div>
+          </div>
+          <button class="btn btn--ghost checkout-back" id="checkoutBack">← Back to seats</button>
+        </div>
+      </div>
+      <!-- RESULT PANEL -->
+      <div class="result-panel" id="resultPanel" hidden>
+        <div class="result-panel__inner" id="resultPanelInner"></div>
+        <div class="result-panel__actions">
+          <button class="btn btn--ghost"   id="resultClose">Close</button>
+          <button class="btn btn--primary" id="resultNewBooking" hidden>Book More Seats</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- SHOWTIME MODAL -->
+    <div class="modal-backdrop" id="showtimeBackdrop" aria-hidden="true"></div>
+    <dialog class="showtime-modal" id="showtimeModal" aria-labelledby="showtimeModalTitle" aria-modal="true">
+      <div class="showtime-modal__header">
+        <h2 class="showtime-modal__title" id="showtimeModalTitle">Showtimes</h2>
+        <button class="modal-close" id="showtimeModalClose" aria-label="Close showtimes">✕</button>
+      </div>
+      <div class="showtime-modal__body" id="showtimeModalBody"></div>
+    </dialog>
+
+    <!-- FOOTER -->
+    <footer class="site-footer" role="contentinfo">
+      <div class="container">
+        <div class="site-footer__inner">
+          <div class="site-footer__brand">
+            <span class="logo-icon" aria-hidden="true">◈</span>
+            <span class="logo-text">LUMEN</span>
+          </div>
+          <p class="site-footer__copy">© 2026 LUMEN Cinema &mdash; Demo project. No real bookings or payments.</p>
+          <p class="site-footer__health" id="healthStatus" aria-live="polite"></p>
+        </div>
+      </div>
+    </footer>
+  </div><!-- /customerView -->
+
+  <!-- ═══════════════════════════════════════════════
+       CINEMA OWNER VIEW
+  ═══════════════════════════════════════════════ -->
+  <div class="app-view" id="ownerView" hidden>
+
+    <div class="demo-view-banner" role="status">
+      <span class="demo-view-banner__badge">DEMO</span>
+      <span class="demo-view-banner__label">Cinema Owner View</span>
+      <div class="demo-view-banner__right">
+        <button type="button" class="theme-toggle" id="themeToggleOwner" aria-label="Toggle theme">
+          <span class="theme-toggle__icon" aria-hidden="true">◐</span>
+          <span class="theme-toggle__text">Dark</span>
+        </button>
+        <button class="btn btn--ghost btn--sm" id="ownerLogout" aria-label="Return to role selection">Switch Role</button>
+      </div>
+    </div>
+
+    <div class="dash-layout">
+      <!-- Sidebar -->
+      <aside class="dash-sidebar" aria-label="Owner navigation">
+        <div class="dash-sidebar__logo">
+          <span class="logo-icon" aria-hidden="true">◈</span>
+          <span class="logo-text">LUMEN</span>
+        </div>
+        <nav class="dash-nav">
+          <a href="#" class="dash-nav__link active" data-owner-tab="schedule" aria-current="page">Schedule</a>
+          <a href="#" class="dash-nav__link" data-owner-tab="cinema">My Cinema</a>
+          <a href="#" class="dash-nav__link" data-owner-tab="screens">Screens</a>
+          <a href="#" class="dash-nav__link" data-owner-tab="occupancy">Occupancy</a>
+        </nav>
+        <div class="dash-sidebar__footer">
+          <button class="btn btn--ghost btn--sm" id="ownerLogout2">← Switch Role</button>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="dash-main" aria-label="Owner dashboard content">
+        <!-- Schedule tab -->
+        <div id="ownerTab-schedule" class="dash-tab">
+          <div class="dash-page-header">
+            <h1 class="dash-page-title">Showtime Schedule</h1>
+            <div class="preview-only-badge" aria-label="Live data from API">Live API data</div>
+          </div>
+          <p class="dash-page-sub">Showing all scheduled showtimes from <code>/api/showtimes</code>. Data is read-only in this demo.</p>
+
+          <div class="dash-stat-row" id="ownerStats">
+            <div class="dash-stat-card">
+              <div class="dash-stat__val" id="ownerStatTotal">—</div>
+              <div class="dash-stat__label">Total Showtimes</div>
+            </div>
+            <div class="dash-stat-card">
+              <div class="dash-stat__val" id="ownerStatFuture">—</div>
+              <div class="dash-stat__label">Upcoming</div>
+            </div>
+            <div class="dash-stat-card">
+              <div class="dash-stat__val" id="ownerStatPast">—</div>
+              <div class="dash-stat__label">Past / Ended</div>
+            </div>
+          </div>
+
+          <div class="dash-card">
+            <div class="dash-card__header">
+              <h2 class="dash-card__title">Scheduled Showtimes</h2>
+              <button class="btn btn--ghost btn--sm" id="ownerRefreshBtn" aria-label="Refresh showtimes">↻ Refresh</button>
+            </div>
+            <div id="ownerScheduleLoading" class="dash-loading"><div class="spinner spinner--sm" aria-hidden="true"></div><span>Loading…</span></div>
+            <div id="ownerScheduleError" class="dash-error" hidden role="alert">
+              <span id="ownerScheduleErrorMsg"></span>
+              <button class="btn btn--ghost btn--sm" id="ownerScheduleRetry">Retry</button>
+            </div>
+            <div class="dash-table-wrap" id="ownerScheduleTable" hidden>
+              <table class="dash-table" aria-label="Showtime schedule">
+                <thead>
+                  <tr>
+                    <th scope="col">Film</th>
+                    <th scope="col">Screen</th>
+                    <th scope="col">Date</th>
+                    <th scope="col">Start</th>
+                    <th scope="col">End</th>
+                    <th scope="col">Price</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="ownerScheduleBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="preview-section">
+            <h2 class="preview-section__title">Schedule a New Showtime</h2>
+            <div class="preview-section__notice">
+              <span class="preview-section__icon" aria-hidden="true">🚧</span>
+              <p>Preview only — backend endpoint not implemented. Controls are disabled.</p>
+            </div>
+            <div class="preview-form" aria-disabled="true">
+              <input class="form-input" disabled placeholder="Select movie…" aria-label="Select movie (disabled preview)" />
+              <input class="form-input" disabled placeholder="Select screen…" aria-label="Select screen (disabled preview)" />
+              <input class="form-input" disabled placeholder="Start date/time…" aria-label="Start time (disabled preview)" />
+              <button class="btn btn--primary" disabled>Create Showtime</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cinema tab -->
+        <div id="ownerTab-cinema" class="dash-tab" hidden>
+          <div class="dash-page-header">
+            <h1 class="dash-page-title">My Cinema</h1>
+            <div class="preview-only-badge">Preview Only</div>
+          </div>
+          <div class="dash-card" id="ownerCinemaCard">
+            <div class="dash-card__header"><h2 class="dash-card__title">Cinema Details</h2></div>
+            <div class="dash-kv-list" id="ownerCinemaDetails">
+              <div class="dash-kv"><span class="dash-kv__label">Name</span><span class="dash-kv__val" id="ownerCinemaName">—</span></div>
+              <div class="dash-kv"><span class="dash-kv__label">City</span><span class="dash-kv__val" id="ownerCinemaCity">—</span></div>
+            </div>
+          </div>
+          <div class="preview-section">
+            <h2 class="preview-section__title">Edit Cinema Details</h2>
+            <div class="preview-section__notice">
+              <span class="preview-section__icon" aria-hidden="true">🚧</span>
+              <p>Preview only — management endpoint not implemented. No changes can be saved.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screens tab -->
+        <div id="ownerTab-screens" class="dash-tab" hidden>
+          <div class="dash-page-header">
+            <h1 class="dash-page-title">Screens</h1>
+            <div class="preview-only-badge">Preview Only</div>
+          </div>
+          <div class="preview-section">
+            <h2 class="preview-section__title">Screen Management</h2>
+            <div class="preview-section__notice">
+              <span class="preview-section__icon" aria-hidden="true">🚧</span>
+              <p>Preview only — no screen management endpoints are implemented. Derived from showtime data only.</p>
+            </div>
+            <div class="dash-card" id="ownerScreensCard">
+              <div class="dash-card__header"><h2 class="dash-card__title">Known Screens (from showtime data)</h2></div>
+              <div class="dash-table-wrap">
+                <table class="dash-table" aria-label="Screens derived from showtime data">
+                  <thead><tr><th scope="col">Screen</th><th scope="col">Tier</th><th scope="col">Aspect Ratio</th></tr></thead>
+                  <tbody id="ownerScreensBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Occupancy tab -->
+        <div id="ownerTab-occupancy" class="dash-tab" hidden>
+          <div class="dash-page-header">
+            <h1 class="dash-page-title">Occupancy &amp; Revenue</h1>
+            <div class="preview-only-badge">Preview Only</div>
+          </div>
+          <div class="preview-section">
+            <div class="preview-section__notice">
+              <span class="preview-section__icon" aria-hidden="true">🚧</span>
+              <p>Occupancy and revenue metrics require booking/payment data APIs which are not yet implemented. No figures are displayed to avoid showing fabricated data.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div><!-- /ownerView -->
+
+  <!-- ═══════════════════════════════════════════════
+       ADMIN VIEW
+  ═══════════════════════════════════════════════ -->
+  <div class="app-view" id="adminView" hidden>
+
+    <div class="demo-view-banner demo-view-banner--admin" role="status">
+      <span class="demo-view-banner__badge demo-view-banner__badge--admin">DEMO</span>
+      <span class="demo-view-banner__label">Administrator View</span>
+      <div class="demo-view-banner__right">
+        <button type="button" class="theme-toggle" id="themeToggleAdmin" aria-label="Toggle theme">
+          <span class="theme-toggle__icon" aria-hidden="true">◐</span>
+          <span class="theme-toggle__text">Dark</span>
+        </button>
+        <button class="btn btn--ghost btn--sm" id="adminLogout" aria-label="Return to role selection">Switch Role</button>
+      </div>
+    </div>
+
+    <div class="dash-layout">
+      <!-- Sidebar -->
+      <aside class="dash-sidebar dash-sidebar--admin" aria-label="Admin navigation">
+        <div class="dash-sidebar__logo">
+          <span class="logo-icon" aria-hidden="true">◈</span>
+          <span class="logo-text">LUMEN</span>
+        </div>
+        <nav class="dash-nav">
+          <a href="#" class="dash-nav__link active" data-admin-tab="overview"   aria-current="page">Overview</a>
+          <a href="#" class="dash-nav__link" data-admin-tab="movies">Movies</a>
+          <a href="#" class="dash-nav__link" data-admin-tab="cinemas">Cinemas</a>
+          <a href="#" class="dash-nav__link" data-admin-tab="showtimes">Showtimes</a>
+          <a href="#" class="dash-nav__link" data-admin-tab="users">Users</a>
+          <a href="#" class="dash-nav__link" data-admin-tab="bookings">Bookings</a>
+          <a href="#" class="dash-nav__link" data-admin-tab="payments">Payments</a>
+          <a href="#" class="dash-nav__link" data-admin-tab="settings">Settings</a>
+        </nav>
+        <div class="dash-sidebar__footer">
+          <button class="btn btn--ghost btn--sm" id="adminLogout2">← Switch Role</button>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="dash-main" aria-label="Admin dashboard content">
+        <div class="admin-persistent-notice" role="note">
+          ⚠ Demo UI only — no admin authorization or management endpoints are connected. All write controls are disabled.
+        </div>
+
+        <!-- Overview -->
+        <div id="adminTab-overview" class="dash-tab">
+          <div class="dash-page-header">
+            <h1 class="dash-page-title">System Overview</h1>
+          </div>
+          <div class="dash-stat-row">
+            <div class="dash-stat-card dash-stat-card--admin">
+              <div class="dash-stat__val" id="adminStatMovies">—</div>
+              <div class="dash-stat__label">Active Movies</div>
+              <div class="dash-stat__src">via /api/movies</div>
+            </div>
+            <div class="dash-stat-card dash-stat-card--admin">
+              <div class="dash-stat__val" id="adminStatShowtimes">—</div>
+              <div class="dash-stat__label">Scheduled Showtimes</div>
+              <div class="dash-stat__src">via /api/showtimes</div>
+            </div>
+            <div class="dash-stat-card dash-stat-card--admin">
+              <div class="dash-stat__val" id="adminStatNow">—</div>
+              <div class="dash-stat__label">Now Showing</div>
+              <div class="dash-stat__src">from movies API</div>
+            </div>
+            <div class="dash-stat-card dash-stat-card--admin">
+              <div class="dash-stat__val" id="adminStatSoon">—</div>
+              <div class="dash-stat__label">Coming Soon</div>
+              <div class="dash-stat__src">from movies API</div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card__header"><h2 class="dash-card__title">API Health</h2></div>
+            <div class="dash-kv-list">
+              <div class="dash-kv"><span class="dash-kv__label">Status</span><span class="dash-kv__val" id="adminHealthVal">Checking…</span></div>
+              <div class="dash-kv"><span class="dash-kv__label">Endpoint</span><span class="dash-kv__val"><code>/api/health</code></span></div>
+              <div class="dash-kv"><span class="dash-kv__label">Database</span><span class="dash-kv__val">lumen_db (MySQL)</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Movies -->
+        <div id="adminTab-movies" class="dash-tab" hidden>
+          <div class="dash-page-header">
+            <h1 class="dash-page-title">Movies</h1>
+            <div class="preview-only-badge">Read-only — live API</div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card__header">
+              <h2 class="dash-card__title">All Active Movies</h2>
+              <span class="dash-card__sub">Source: <code>/api/movies</code></span>
+            </div>
+            <div class="dash-table-wrap">
+              <table class="dash-table" aria-label="All active movies">
+                <thead>
+                  <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Title</th>
+                    <th scope="col">Genre</th>
+                    <th scope="col">Language</th>
+                    <th scope="col">Duration</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Release</th>
+                  </tr>
+                </thead>
+                <tbody id="adminMoviesBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="preview-section">
+            <h2 class="preview-section__title">Add / Edit Movies</h2>
+            <div class="preview-section__notice">
+              <span class="preview-section__icon" aria-hidden="true">🚧</span>
+              <p>Preview only — no movie write endpoints are implemented. Controls are disabled.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cinemas -->
+        <div id="adminTab-cinemas" class="dash-tab" hidden>
+          <div class="dash-page-header">
+            <h1 class="dash-page-title">Cinemas</h1>
+            <div class="preview-only-badge">Derived from showtime data</div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card__header"><h2 class="dash-card__title">Known Cinemas (from showtime API)</h2></div>
+            <div class="dash-table-wrap">
+              <table class="dash-table" aria-label="Cinemas">
+                <thead><tr><th scope="col">Cinema</th><th scope="col">City</th><th scope="col">Showtimes</th></tr></thead>
+                <tbody id="adminCinemasBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="preview-section">
+            <div class="preview-section__notice">
+              <span class="preview-section__icon" aria-hidden="true">🚧</span>
+              <p>Preview only — no cinema management endpoints implemented.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Showtimes -->
+        <div id="adminTab-showtimes" class="dash-tab" hidden>
+          <div class="dash-page-header">
+            <h1 class="dash-page-title">Showtimes</h1>
+            <div class="preview-only-badge">Live API data</div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-card__header">
+              <h2 class="dash-card__title">All Showtimes</h2>
+              <span class="dash-card__sub">Source: <code>/api/showtimes</code></span>
+            </div>
+            <div class="dash-table-wrap">
+              <table class="dash-table" aria-label="All showtimes">
+                <thead>
+                  <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Film</th>
+                    <th scope="col">Cinema</th>
+                    <th scope="col">Screen</th>
+                    <th scope="col">Start</th>
+                    <th scope="col">End</th>
+                    <th scope="col">Price</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="adminShowtimesBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users (no API) -->
+        <div id="adminTab-users" class="dash-tab" hidden>
+          <div class="dash-page-header"><h1 class="dash-page-title">Users</h1></div>
+          <div class="not-connected-panel" role="status">
+            <div class="not-connected-panel__icon" aria-hidden="true">🔌</div>
+            <h2 class="not-connected-panel__title">Not Connected</h2>
+            <p class="not-connected-panel__msg">No user-listing API endpoint is implemented. User data cannot be displayed without a backend endpoint.</p>
+          </div>
+        </div>
+
+        <!-- Bookings (no API) -->
+        <div id="adminTab-bookings" class="dash-tab" hidden>
+          <div class="dash-page-header"><h1 class="dash-page-title">Bookings</h1></div>
+          <div class="not-connected-panel" role="status">
+            <div class="not-connected-panel__icon" aria-hidden="true">🔌</div>
+            <h2 class="not-connected-panel__title">Not Connected</h2>
+            <p class="not-connected-panel__msg">No booking-listing API endpoint is implemented. Booking history cannot be displayed.</p>
+          </div>
+        </div>
+
+        <!-- Payments (no API) -->
+        <div id="adminTab-payments" class="dash-tab" hidden>
+          <div class="dash-page-header"><h1 class="dash-page-title">Payments</h1></div>
+          <div class="not-connected-panel" role="status">
+            <div class="not-connected-panel__icon" aria-hidden="true">🔌</div>
+            <h2 class="not-connected-panel__title">Not Connected</h2>
+            <p class="not-connected-panel__msg">No payment-listing API endpoint is implemented. Payment records cannot be displayed.</p>
+          </div>
+        </div>
+
+        <!-- Settings -->
+        <div id="adminTab-settings" class="dash-tab" hidden>
+          <div class="dash-page-header"><h1 class="dash-page-title">Settings</h1></div>
+          <div class="preview-section">
+            <div class="preview-section__notice">
+              <span class="preview-section__icon" aria-hidden="true">🚧</span>
+              <p>Preview only — no settings management endpoints are implemented.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div><!-- /adminView -->
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
